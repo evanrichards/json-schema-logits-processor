@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "json-schema-logits-processor"
+version = "0.1.0"
+description = ""
+authors = ["Evan Richards <tevanrichards@gmail.com>"]
+readme = "README.md"
+packages = [{include = "json_schema_logits_processor"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+transformers = "^4.29.2"
+torch = "^2.0.1"
+
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.3.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
