@@ -4,11 +4,11 @@ from typing import Callable
 import torch
 from transformers import LogitsProcessor, PreTrainedTokenizer
 
-from json_schema_logits_processor.incremental_parser import \
+from json_schema_logits_processor.iterative_parser import \
     parse_partial_json_value
-from json_schema_logits_processor.incremental_parser.types import \
-    PartialValidationResult
-from json_schema_logits_processor.schema import JsonSchema
+from json_schema_logits_processor.iterative_parser.types import \
+    IterativeParserResult
+from json_schema_logits_processor.schema.interative_schema import JsonSchema
 
 
 @dataclass
@@ -36,25 +36,53 @@ class Trie:
     def _search_for_valid_token_ids(
         self,
         prefix: str,
+        next_token: str,
         node: TrieNode,
-        is_valid: Callable[[str], PartialValidationResult],
+        is_valid: Callable[[str, str], bool],
         valid_token_ids: list[int],
     ):
-        partial_validation_result = False
-        if not node.is_root:
-            partial_validation_result = is_valid(prefix)
-        if node.is_root or partial_validation_result:
+        stack = [(prefix, next_token, node)]  # Create a stack with the initial state
+        while stack:  # While the stack is not empty
+            prefix, next_token, node = stack.pop()
+
+            partial_validation_result = None
+            if not node.is_root:
+                partial_validation_result = is_valid(prefix, next_token)
+            if node.id == 48805:
+                print("it does exist", partial_validation_result, prefix, next_token)
+                assert False
+            if next_token == '"':
+                print(
+                    "hello",
+                    f"'{prefix}'",
+                    f"letter: '{next_token}'",
+                    node.id,
+                    partial_validation_result,
+                )
+            new_prefix = prefix + next_token
+
+            if partial_validation_result is False:
+                continue
+            for letter, child_node in node.children.items():
+                if letter == '"':
+                    print(
+                        "hi",
+                        f"'{new_prefix}'",
+                        f"letter: '{letter}'",
+                        node.id,
+                        child_node.id,
+                    )
+
+                stack.append(
+                    (new_prefix, letter, child_node)
+                )  # Add children to the stack
+
             if node.id is not None:
                 valid_token_ids.append(node.id)
-            for letter, child_node in node.children.items():
-                new_prefix = prefix + letter
-                self._search_for_valid_token_ids(
-                    new_prefix, child_node, is_valid, valid_token_ids
-                )
 
-    def find_valid_tokens(self, prefix, is_valid):
+    def find_valid_tokens(self, prefix: str, is_valid: Callable[[str, str], bool]):
         valid_tokens = []
-        self._search_for_valid_token_ids(prefix, self.root, is_valid, valid_tokens)
+        self._search_for_valid_token_ids("", prefix, self.root, is_valid, valid_tokens)
         return valid_tokens
 
 
@@ -108,14 +136,19 @@ class JsonSchemaLogitsProcessor(LogitsProcessor):
 
     def _get_next_valid_tokens(self, text: str) -> list[int]:
         valid_tokens_ids = self.decoded_token_tree.find_valid_tokens(
-            text, lambda x: is_valid_partial_json_for_schema(x, self.schema)
+            text,
+            lambda prefix, next_token: is_valid_partial_json_for_schema(
+                prefix, next_token, self.schema
+            ),
         )
         return valid_tokens_ids
 
 
 def is_valid_partial_json_for_schema(
-    partial_json: str,
+    prefix: str,
+    next_token: str,
     schema: JsonSchema,
 ) -> bool:
-    out = parse_partial_json_value(partial_json, schema)
-    return out.valid and out.rest.strip() == ""
+    print("is_valid_partial_json_for_schema", prefix, next_token)
+    out = parse_partial_json_value(prefix, next_token, schema)
+    return out.valid

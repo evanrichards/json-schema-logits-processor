@@ -2,7 +2,8 @@ import torch
 from transformers import BartTokenizer, EncoderDecoderModel
 
 from json_schema_logits_processor import JsonSchemaLogitsProcessor
-from json_schema_logits_processor.schema import parse_schema_from_string
+from json_schema_logits_processor.schema.interative_schema import \
+    parse_schema_from_string
 
 bart_tokenizer = BartTokenizer.from_pretrained("facebook/bart-base")
 
@@ -48,6 +49,6 @@ input_ids = torch.tensor(bart_tokenizer.encode("", add_special_tokens=True)).uns
 output = model.generate(
     input_ids,
     logits_processor=[logits_processor],
-    max_length=20,
+    max_length=200,
 )
 print(bart_tokenizer.batch_decode(output, skip_special_tokens=True))

@@ -1,11 +1,11 @@
-from enum import Flag, auto
+from enum import Enum
 
 
-class SchemaType(Flag):
-    STRING = auto()
-    NUMBER = auto()
-    OBJECT = auto()
-    ENUM = auto()
+class SchemaType(Enum):
+    STRING = 0
+    NUMBER = 1
+    OBJECT = 2
+    ENUM = 3
     # BOOLEAN = "boolean"
     # ARRAY = "array"
     # NULL = "null"
