@@ -1,9 +1,61 @@
+from dataclasses import dataclass
+from typing import Callable
+
 import torch
 from transformers import LogitsProcessor, PreTrainedTokenizer
 
 from json_schema_logits_processor.incremental_parser import \
     parse_partial_json_value
+from json_schema_logits_processor.incremental_parser.types import \
+    PartialValidationResult
 from json_schema_logits_processor.schema import JsonSchema
+
+
+@dataclass
+class TrieNode:
+    id: int | None = None
+    is_root: bool = False
+
+    def __init__(self):
+        self.children = {}
+
+
+class Trie:
+    def __init__(self):
+        self.root = TrieNode()
+        self.root.is_root = True
+
+    def insert(self, token: str, id: int):
+        node = self.root
+        for char in token:
+            if char not in node.children:
+                node.children[char] = TrieNode()
+            node = node.children[char]
+        node.id = id
+
+    def _search_for_valid_token_ids(
+        self,
+        prefix: str,
+        node: TrieNode,
+        is_valid: Callable[[str], PartialValidationResult],
+        valid_token_ids: list[int],
+    ):
+        partial_validation_result = False
+        if not node.is_root:
+            partial_validation_result = is_valid(prefix)
+        if node.is_root or partial_validation_result:
+            if node.id is not None:
+                valid_token_ids.append(node.id)
+            for letter, child_node in node.children.items():
+                new_prefix = prefix + letter
+                self._search_for_valid_token_ids(
+                    new_prefix, child_node, is_valid, valid_token_ids
+                )
+
+    def find_valid_tokens(self, prefix, is_valid):
+        valid_tokens = []
+        self._search_for_valid_token_ids(prefix, self.root, is_valid, valid_tokens)
+        return valid_tokens
 
 
 class JsonSchemaLogitsProcessor(LogitsProcessor):
@@ -20,6 +72,13 @@ class JsonSchemaLogitsProcessor(LogitsProcessor):
         self.decoded_tokens = self.tokenizer.batch_decode(
             torch.arange(self.tokenizer.vocab_size), skip_special_tokens=True
         )
+        self.decoded_token_tree = self._build_decoded_token_tree()
+
+    def _build_decoded_token_tree(self):
+        trie = Trie()
+        for i, token in enumerate(self.decoded_tokens):
+            trie.insert(token, i)
+        return trie
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor):
         # Decode the text so far.
@@ -48,12 +107,10 @@ class JsonSchemaLogitsProcessor(LogitsProcessor):
         return return_tensor
 
     def _get_next_valid_tokens(self, text: str) -> list[int]:
-        valid_tokens = []
-        for token_id in range(self.tokenizer.vocab_size):
-            token = self.decoded_tokens[token_id]
-            if is_valid_partial_json_for_schema(text + token, self.schema):
-                valid_tokens.append(token_id)
-        return valid_tokens
+        valid_tokens_ids = self.decoded_token_tree.find_valid_tokens(
+            text, lambda x: is_valid_partial_json_for_schema(x, self.schema)
+        )
+        return valid_tokens_ids
 
 
 def is_valid_partial_json_for_schema(

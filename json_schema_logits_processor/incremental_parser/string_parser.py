@@ -29,9 +29,9 @@ def is_valid_string(partial_json: str) -> PartialValidationResult:
 def _parse_value(value: str):
     value = value.strip()
     # remove functional quotes
-    if len(value) > 0 and value.startswith('"'):
+    if len(value) > 0 and value[0] == '"':
         value = value[1:]
-    if len(value) > 0 and value.endswith('"') and len(value) > 1 and value[-2] != "\\":
+    if len(value) > 0 and value[-1] == '"' and len(value) > 1 and value[-2] != "\\":
         value = value[:-1]
     return value
 
@@ -51,15 +51,15 @@ def _next(partial_json: str, start_idx: int, next_state: int) -> tuple[bool, int
 def _start(partial_json: str, start_idx: int) -> tuple[bool, int, int]:
     if partial_json[start_idx] in WHITESPACE:
         return (True, START, start_idx + 1)
-    if partial_json[start_idx].startswith('"'):
+    if partial_json[start_idx][0] == '"':
         return (True, STRING, start_idx + 1)
     return (False, START, start_idx)
 
 
 @lru_cache(maxsize=1024)
 def _string(partial_json: str, start_idx: int) -> tuple[bool, int, int]:
-    if partial_json[start_idx].startswith('"'):
+    if partial_json[start_idx][0] == '"':
         return (True, DONE, start_idx + 1)
-    if partial_json[start_idx].startswith("\\"):
+    if partial_json[start_idx][0] == "\\":
         return (True, ESCAPE, start_idx + 1)
     return (True, STRING, start_idx + 1)
