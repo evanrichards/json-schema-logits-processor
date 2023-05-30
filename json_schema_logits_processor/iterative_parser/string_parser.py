@@ -53,7 +53,8 @@ def is_valid_string(
 
 
 def _parse_value(value: str, start_idx: int, end_idx: int):
-    value = value[start_idx:end_idx].strip()
+    value = value[start_idx:end_idx]
+    value = value.lstrip()
     # remove functional quotes
     if len(value) > 0 and value.startswith('"'):
         value = value[1:]

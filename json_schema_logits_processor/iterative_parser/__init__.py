@@ -16,15 +16,20 @@ def parse_partial_json_value(
     root_string: str,
     next_token: str,
     schema: JsonSchema,
-) -> IterativeParserResult:
+) -> tuple[bool, bool]:
     penultimate_state = _parse_partial_json_value(root_string, schema)
-    print(penultimate_state)
     if not penultimate_state.valid:
-        return penultimate_state
+        return (
+            penultimate_state.valid,
+            penultimate_state.complete and penultimate_state.schema_id == SchemaId(0),
+        )
     if len(root_string) + 1 < penultimate_state.string_index:
-        return penultimate_state
-    print("complete", schema.__dict__, root_string, next_token)
-    return _parse_one_token(root_string + next_token, penultimate_state, schema)
+        return (
+            penultimate_state.valid,
+            penultimate_state.complete and penultimate_state.schema_id == SchemaId(0),
+        )
+    out = _parse_one_token(root_string + next_token, penultimate_state, schema)
+    return out.valid, out.complete and out.schema_id == SchemaId(0)
 
 
 @lru_cache(maxsize=1_000_000)
@@ -38,7 +43,7 @@ def _parse_partial_json_value(
             string_index=0,
             schema_id=SchemaId(0),
             next_state=0,
-            value=(),
+            value_stack=(),
         )
     previous_result = _parse_partial_json_value(json_str[:-1], schema)
     if not previous_result.valid:
@@ -63,18 +68,15 @@ def _parse_one_token(
                 string_index=state.string_index + 1,
                 schema_id=state.schema_id,
                 next_state=0,
-                value=state.value,
+                value_stack=state.value_stack,
             )
         curr_schema = schema[curr_schema.parent_id]
     match curr_schema:
         case StringJsonSchema():
-            print("string")
             return is_valid_string(json_str, curr_schema, state)
         case ObjectJsonSchema():
-            print("object")
-            return is_valid_object(json_str, curr_schema, schema, state)
+            return is_valid_object(json_str, curr_schema, state)
         case EnumJsonSchema():
-            print("enum")
             return is_valid_enum(json_str, curr_schema, state)
         case default:
             raise ValueError(f"Unknown schema type {default}")

@@ -16,17 +16,10 @@ class IncrementalStringValue:
 @dataclass
 class IncrementalObjectValue:
     remaining_keys: tuple[str, ...]
-    current_value_schema_id: Optional[SchemaId]
-    current_key_value: Optional[IncrementalStringValue]
+    latest_added_key: str | None
 
     def __hash__(self):
-        return hash(
-            (
-                self.remaining_keys,
-                self.current_value_schema_id,
-                self.current_key_value,
-            )
-        )
+        return hash((self.remaining_keys,))
 
 
 IterativeParserValue = tuple[
@@ -49,6 +42,21 @@ def push_value(
     return value_stack + ((schema_id, value),)
 
 
+def pop_value(
+    value_stack: IterativeParserValue,
+    schema_id: SchemaId,
+):
+    if len(value_stack) == 0:
+        return None, value_stack
+    if len(value_stack) == 1:
+        rest, value = (), value_stack[0]
+    else:
+        rest, value = value_stack[:-1], value_stack[-1]
+    if value[0] != schema_id:
+        return None, value_stack
+    return value, rest
+
+
 def pop_string_value(
     value_stack: IterativeParserValue,
     schema_id: SchemaId,
@@ -69,8 +77,13 @@ def pop_string_value(
 def pop_object_value(
     valueStack: IterativeParserValue,
     schema_id: SchemaId,
-) -> tuple[IncrementalObjectValue, IterativeParserValue]:
-    rest, value = valueStack[:-1], valueStack[-1]
+) -> tuple[Optional[IncrementalObjectValue], IterativeParserValue]:
+    if len(valueStack) == 0:
+        return None, valueStack
+    if len(valueStack) == 1:
+        rest, value = (), valueStack[0]
+    else:
+        rest, value = valueStack[:-1], valueStack[-1]
     assert value[0] == schema_id
     assert isinstance(value[1], IncrementalObjectValue)
     return value[1], rest
@@ -85,7 +98,7 @@ def find_value(
     return None
 
 
-def replace_value(
+def _replace_value(
     previous_value: IterativeParserValue | None,
     schema_id: SchemaId,
     return_value: IncrementalStringValue | IncrementalObjectValue,
